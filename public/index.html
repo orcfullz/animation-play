@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scroll-Controlled Frame Playback</title>
+    <style>
+        body, html {
+    margin: 0;
+    padding: 0;
+    height: 100%; 
+}
+
+#frame-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    /* Additional styles to ensure the frame is displayed correctly */
+}
+
+#scroll-container {
+    height: 25100px; /* Adjust this value based on the total scroll length you need */
+    opacity: 0; /* Make it invisible */
+    pointer-events: none; /* Prevent interaction with this container */
+}
+
+img{height:auto; width:100vw;}
+
+    </style>
+</head>
+<body>
+
+    <div id="frame-container"></div> <!-- Fixed container for displaying frames -->
+    <div id="scroll-container"></div> <!-- Invisible container to handle scrolling -->
+    
+<script>
+    const videoUrl = 'test.mp4';
+    const frameContainer = document.getElementById('frame-container');
+    let frames = [];
+    let totalFrames;
+    let FPS = 25; // Frames per second of the video
+
+    fetch(videoUrl)
+        .then(res => res.blob())
+        .then(blob => {
+            return new Promise((res) => {
+                const fr = new FileReader();
+                fr.onload = e => res(fr.result);
+                fr.readAsDataURL(blob);
+            })
+        })
+        .then(async (base64str) => {
+            const video = document.createElement("video");
+            video.src = base64str;
+            video.muted = true;
+            video.style.display = 'none'; // Hide the video element
+
+            while (isNaN(video.duration)) {
+                await new Promise((r) => setTimeout(r, 50));
+            }
+
+            totalFrames = Math.ceil(video.duration * FPS);
+            frameContainer.style.height = `${totalFrames * 50}px`; // Extended scroll length
+            console.log(`Total frames: ${totalFrames}`);
+
+            video.currentTime = video.duration;
+
+            while (video.currentTime) {
+                if (video.currentTime - 1 / FPS < 0)
+                    video.currentTime = 0;
+                else
+                    video.currentTime -= 1 / FPS;
+
+                await new Promise((next) => {
+                    video.addEventListener('seeked', () => {
+                        const canvas = document.createElement("canvas");
+                        Object.assign(canvas, {
+                            width: video.videoWidth,
+                            height: video.videoHeight
+                        });
+                        canvas.getContext("2d").drawImage(video, 0, 0);
+                        frames.push(canvas);
+                        console.log(`Extracted frame at ${video.currentTime}, total: ${frames.length}`);
+                        next();
+                    }, { once: true });
+                });
+            }
+
+            // Create an img element for displaying frames
+            const frameDisplay = document.createElement('img');
+            frameContainer.appendChild(frameDisplay);
+
+            // Scroll event listener to change frames
+          // Inside your existing scroll event listener:
+
+window.addEventListener('scroll', () => {
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    const frameIndex = Math.floor(scrollTop / 50) % totalFrames;
+    
+    if (frames[frameIndex]) {
+        requestAnimationFrame(() => {
+            const frameDataUrl = frames[frameIndex].toDataURL('image/jpeg', 0.9);
+            frameDisplay.src = frameDataUrl; // Update the img src
+
+            frameDisplay.onload = () => {
+                console.log(`Frame ${frameIndex} loaded successfully`);
+            };
+
+            frameDisplay.onerror = (e) => {
+                console.error(`Error loading frame ${frameIndex}:`, e);
+            };
+        });
+    }
+});
+
+        });
+</script>
+
+</body>
+</html>
